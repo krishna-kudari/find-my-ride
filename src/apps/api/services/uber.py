@@ -1,12 +1,11 @@
-"Uber client service"
+"""Uber client service"""
 
-import ast
 import json
 from curl_cffi import requests as curl_requests
 
-from .account_pool.account_pool import AccountPool
+from .base import BaseRideService
 
-URL = "https://m.uber.com/go/graphql"
+API_URL = "https://m.uber.com/go/graphql"
 
 # Fallback headers when no ServiceAccount for client "uber" is configured.
 DEFAULT_HEADERS = {
@@ -101,40 +100,19 @@ fragment HourlyOverageRatesFragment on RVWebCommonHourlyOverageRates {
 """
 
 
-def _get_headers():
-    """Get headers from ServiceAccount (client='uber') or fallback to DEFAULT_HEADERS.
-
-    Supports both Python dict syntax (single quotes) and JSON format (double quotes).
-    """
-    try:
-        account = AccountPool().get_service_account("uber")
-        creds_str = account.credentials.strip()
-        print(account, creds_str)
-
-        # Handle "headers: { ... }" format by extracting the dict part
-        if creds_str.startswith("headers:"):
-            start_idx = creds_str.find("{")
-            end_idx = creds_str.rfind("}")
-            if start_idx != -1 and end_idx != -1:
-                creds_str = creds_str[start_idx:end_idx + 1]
-
-        # Try parsing as Python dict (single quotes) first
-        try:
-            return ast.literal_eval(creds_str)
-        except (ValueError, SyntaxError):
-            print("Error parsing as Python dict")
-            # Fall back to JSON parsing (double quotes)
-            return json.loads(creds_str)
-    except (IndexError, json.JSONDecodeError, TypeError, AttributeError, ValueError, SyntaxError):
-        print("Error parsing creds")
-        return DEFAULT_HEADERS.copy()
-
-
-class Uber:
+class Uber(BaseRideService):
     """Uber pricing via GraphQL. Uses curl_cffi with Chrome impersonation so TLS matches browser/Postman."""
 
-    def fetch_prices(self, source, destination):
-        "fetch prices from uber"
+    def __init__(self):
+        """Initialize Uber service."""
+        super().__init__(
+            service_name="uber",
+            api_url=API_URL,
+            default_headers=DEFAULT_HEADERS
+        )
+
+    def fetch_prices(self, source: tuple, destination: tuple) -> dict | None:
+        """Fetch prices from Uber."""
         pickup = {"latitude": source[0], "longitude": source[1]}
         destinations = [{"latitude": destination[0], "longitude": destination[1]}]
         variables = {
@@ -144,14 +122,15 @@ class Uber:
             "pickup": pickup,
         }
         payload = {"query": PRODUCTS_QUERY.strip(), "variables": variables}
-        headers = _get_headers()
 
-        session = curl_requests.Session(impersonate="chrome")
+        session = self._get_session()
+        headers = self._get_headers()
+
         try:
             print("calling uber api")
-            r = session.post(URL, headers=headers, json=payload, timeout=30)
-            r.raise_for_status()
-            data = r.json()
+            response = session.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
         except (curl_requests.RequestsError, json.JSONDecodeError):
             print("error from api call")
             return None
@@ -162,9 +141,8 @@ class Uber:
         for err in errors:
             if isinstance(err, dict) and "bd-challenge" in str(err.get("message", "")):
                 return None
-            if isinstance(err, dict) and "bd-challenge" in str(
-                err.get("extensions", "")
-            ):
+            if isinstance(err, dict) and "bd-challenge" in str(err.get("extensions", "")):
                 return None
+
         print(data)
         return data.get("data", data)

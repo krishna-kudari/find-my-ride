@@ -1,12 +1,8 @@
-"Rapido client service"
+"""Rapido client service"""
 
-import ast
-import json
-from curl_cffi import requests as curl_requests
+from .base import BaseRideService
 
-from .account_pool.account_pool import AccountPool
-
-URL = "https://m.rapido.bike/pwa/api/pricing/getFareEstimate"
+API_URL = "https://m.rapido.bike/pwa/api/pricing/getFareEstimate"
 
 DEFAULT_HEADERS = {
     "x-consumer-username": "663c81ebbfa8fc234d1a5692:",
@@ -30,38 +26,19 @@ DEFAULT_HEADERS = {
 }
 
 
-def _get_headers():
-    """Get headers from ServiceAccount (client='rapido') or fallback to DEFAULT_HEADERS.
+class Rapido(BaseRideService):
+    """Rapido pricing via REST. Uses curl_cffi."""
 
-    Supports both Python dict syntax (single quotes) and JSON format (double quotes).
-    """
-    try:
-        account = AccountPool().get_service_account("rapido")
-        creds_str = account.credentials.strip()
-        print(account, creds_str)
+    def __init__(self):
+        """Initialize Rapido service."""
+        super().__init__(
+            service_name="rapido",
+            api_url=API_URL,
+            default_headers=DEFAULT_HEADERS
+        )
 
-        # Handle "headers: { ... }" format by extracting the dict part
-        if creds_str.startswith("headers:"):
-            start_idx = creds_str.find("{")
-            end_idx = creds_str.rfind("}")
-            if start_idx != -1 and end_idx != -1:
-                creds_str = creds_str[start_idx:end_idx + 1]
-
-        # Try parsing as Python dict (single quotes) first
-        try:
-            return ast.literal_eval(creds_str)
-        except (ValueError, SyntaxError):
-            print("Error parsing as Python dict")
-            # Fall back to JSON parsing (double quotes)
-            return json.loads(creds_str)
-    except (IndexError, json.JSONDecodeError, TypeError, AttributeError, ValueError, SyntaxError):
-        print("Error parsing creds")
-        return DEFAULT_HEADERS.copy()
-
-class Rapido:
-    """Rapido pricing via REST. User curl_cffi"""
-
-    def fetch_prices(self, source, destination):
+    def fetch_prices(self, source: tuple, destination: tuple) -> dict | None:
+        """Fetch prices from Rapido."""
         print("fetch prices from rapido")
         pickup = {"lat": source[0], "lng": source[1]}
         drop = {"lat": destination[0], "lng": destination[1]}
@@ -73,12 +50,4 @@ class Rapido:
             "couponCode": "",
             "customer": "663c81ebbfa8fc234d1a5692",
         }
-
-        session = curl_requests.Session(impersonate="chrome")
-        headers = _get_headers()
-        print("calling rapido api", headers)
-        r = session.post(URL, headers=headers, json=payload, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-        print("rapido",data)
-        return data.get("data", data)
+        return self._make_request("POST", json=payload)

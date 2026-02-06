@@ -1,12 +1,8 @@
-"Ola client service"
+"""Ola client service"""
 
-import ast
-import json
-from curl_cffi import requests as curl_requests
+from .base import BaseRideService
 
-from .account_pool.account_pool import AccountPool
-
-URL = "https://book.olacabs.com/data-api/category-fare/p2p?"
+API_URL = "https://book.olacabs.com/data-api/category-fare/p2p?"
 
 DEFAULT_HEADERS = {
     "accept": "application/json",
@@ -27,39 +23,20 @@ DEFAULT_HEADERS = {
     "Cookie": "_ga_7QP5L1NN0B=GS2.2.s1769692562$o1$g0$t1769692562$j60$l0$h0; OSRN_v1=1e6wKfFG6jDvU4G8wkvKU4zi; _gcl_au=1.1.327779086.1769692586; _ga_EKVXJMSBW2=GS2.2.s1769692609$o1$g0$t1769692609$j60$l0$h0; _csrf=zzke-boKz97271WbbAv8W7Au; XSRF-TOKEN=Aw1cyuX0-QcnS5e3DaPfFLmL9Ecm74TnENn0; AKA_A2=A; wasc=web-7d7ddc0d-d0f1-4716-b0af-bd3b08bade27__tLLFDRVs0V7V+iK2ZYrNnWrBDD1hGm7s1Tau93m1wenWhC+yePWHcCgJilWJf3svKOokNEpuuqJ7htYuYwyFdMe5VUXd4F/k7tfTiCevRzchh3q//wRoH9o9/qWYbXf2SuDzMSr+f41d42si9U8fwom24rJbcVgb1t/6wb0yzMg; _gid=GA1.2.355179680.1770361461; _gat=1; _ga=GA1.1.1307449666.1769692562; _ga_2TR8WHTK1X=GS2.1.s1770361460$o2$g1$t1770361573$j60$l0$h0; _ga_FR59878HTR=GS2.2.s1770361460$o2$g1$t1770361573$j60$l0$h0",
 }
 
-def _get_headers():
-    """Get headers from ServiceAccount (client='ola') or fallback to DEFAULT_HEADERS.
 
-    Supports both Python dict syntax (single quotes) and JSON format (double quotes).
-    """
-    try:
-        account = AccountPool().get_service_account("ola")
-        creds_str = account.credentials.strip()
-        print(account, creds_str)
-
-        # Handle "headers: { ... }" format by extracting the dict part
-        if creds_str.startswith("headers:"):
-            start_idx = creds_str.find("{")
-            end_idx = creds_str.rfind("}")
-            if start_idx != -1 and end_idx != -1:
-                creds_str = creds_str[start_idx:end_idx + 1]
-
-        # Try parsing as Python dict (single quotes) first
-        try:
-            return ast.literal_eval(creds_str)
-        except (ValueError, SyntaxError):
-            print("Error parsing as Python dict")
-            # Fall back to JSON parsing (double quotes)
-            return json.loads(creds_str)
-    except (IndexError, json.JSONDecodeError, TypeError, AttributeError, ValueError, SyntaxError):
-        print("Error parsing creds")
-        return DEFAULT_HEADERS.copy()
-
-class Ola:
+class Ola(BaseRideService):
     """Ola pricing via REST. Uses curl_cffi."""
 
-    def fetch_prices(self, source, destination):
-        "fetch prices from Ola"
+    def __init__(self):
+        """Initialize Ola service."""
+        super().__init__(
+            service_name="ola",
+            api_url=API_URL,
+            default_headers=DEFAULT_HEADERS
+        )
+
+    def fetch_prices(self, source: tuple, destination: tuple) -> dict | None:
+        """Fetch prices from Ola."""
         params = {
             "pickupLat": source[0],
             "pickupLng": source[1],
@@ -70,11 +47,4 @@ class Ola:
             "silent": "false",
             "suggestPickup": "true",
         }
-        session = curl_requests.Session(impersonate="chrome")
-        headers = _get_headers()
-        print("calling ola api", headers)
-        r = session.get(URL, headers=headers, params=params, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-        print("ola", data)
-        return data.get("data", data)
+        return self._make_request("GET", params=params)
