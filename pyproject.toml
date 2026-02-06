@@ -8,9 +8,24 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12.2"
 dependencies = [
+    "django (>=6.0.1,<7.0.0)",
+    "djangorestframework (>=3.16.1,<4.0.0)",
+    "python-dotenv (>=1.2.1,<2.0.0)",
+    "requests (>=2.32.5,<3.0.0)",
+    "gql[all] (>=4.0.0,<5.0.0)",
+    "curl_cffi (>=0.7.0,<1.0.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "django-stubs (>=5.2.9,<6.0.0)",
+    "djangorestframework-stubs (>=3.16.7,<4.0.0)",
+    "types-requests (>=2.32.4.20260107,<3.0.0.0)",
+    "types-python-dateutil (>=2.9.0.20260124,<3.0.0.0)",
+    "types-pyyaml (>=6.0.12.20250915,<7.0.0.0)"
+]
