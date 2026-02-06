@@ -7,6 +7,7 @@ from rest_framework.request import Request
 from .services.uber import Uber
 from .services.rapido import Rapido
 from .services.ola import Ola
+from .services.fare_parser import restructure_fares_by_category
 
 
 @api_view(["GET"])
@@ -20,28 +21,40 @@ def fares(request: Request):
     ""
     source = (12.912168, 77.6438711)
     destination = (12.9352403, 77.624532)
-    response = {"uber": None, "rapido": None, "ola": None}
+    
+    ola_data = None
+    uber_data = None
+    rapido_data = None
+    
     try:
         result = Uber().fetch_prices(source, destination)
         if result is not None:
-            response["uber"] = result
+            uber_data = result
     except Exception:
         pass
+    
     try:
         result = Rapido().fetch_prices(source, destination)
         if result is not None:
-            response["rapido"] = result
+            rapido_data = result
     except Exception:
         pass
 
     try:
         result = Ola().fetch_prices(source, destination)
         if result is not None:
-            response["ola"] = result
+            ola_data = result
     except Exception:
         pass
 
-    return Response({"status": "ok", "data": response})
+    # Restructure fares by category
+    restructured_data = restructure_fares_by_category(
+        ola_data=ola_data,
+        uber_data=uber_data,
+        rapido_data=rapido_data
+    )
+
+    return Response({"status": "ok", "data": restructured_data})
 
 @api_view(["GET"])
 def get_fares_uber(request: Request):
