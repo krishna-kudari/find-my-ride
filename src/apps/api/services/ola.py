@@ -1,8 +1,11 @@
 """Ola client service"""
 
+import json
+
 from .base import BaseRideService
 
 API_URL = "https://book.olacabs.com/data-api/category-fare/p2p?"
+BIKE_API_URL = "https://book.olacabs.com/data-api/prebook?silent=true&utm_source=widget_on_olacabs"
 
 DEFAULT_HEADERS = {
     "accept": "application/json",
@@ -35,8 +38,76 @@ class Ola(BaseRideService):
             default_headers=DEFAULT_HEADERS
         )
 
+    def _extract_csrf_token(self, headers: dict) -> str | None:
+        """Extract CSRF token from Cookie header."""
+        cookie = headers.get("Cookie", "")
+        if not cookie:
+            return None
+        
+        # Look for XSRF-TOKEN in cookies
+        for part in cookie.split(";"):
+            part = part.strip()
+            if part.startswith("XSRF-TOKEN="):
+                return part.split("=", 1)[1]
+        return None
+
+    def _fetch_bike_price(self, source: tuple, destination: tuple) -> dict | None:
+        """Fetch bike price from Ola using the prebook endpoint."""
+        payload = {
+            "fromLocation": {
+                "lat": source[0],
+                "lng": source[1]
+            },
+            "toLocation": {
+                "lat": destination[0],
+                "lng": destination[1]
+            },
+            "serviceType": "p2p",
+            "pickupMode": "NOW",
+            "pickupTime": 0,
+            "category": "bike",
+            "paymentType": 1,
+            "couponCode": "",
+            "fareId": "",
+            "leadSource": "desktop_website",
+            "retryCount": 0,
+            "liteParams": {}
+        }
+
+        session = self._get_session()
+        headers = self._get_headers()
+        
+        # Use CSRF token from headers if present, otherwise extract from cookies
+        if "csrf-token" not in headers:
+            csrf_token = self._extract_csrf_token(headers)
+            if csrf_token:
+                headers["csrf-token"] = csrf_token
+        
+        # Add origin header
+        headers["origin"] = "https://book.olacabs.com"
+        
+        # Update referer to match the bike API endpoint format
+        headers["referer"] = f"https://book.olacabs.com/confirm-ride-p2p?serviceType=p2p&utm_source=widget_on_olacabs&drop_lat={destination[0]}&drop_lng={destination[1]}&lat={source[0]}&lng={source[1]}&pickup="
+
+        try:
+            print(f"calling {self.service_name} bike api")
+            # Send payload as JSON string (matching the curl request)
+            response = session.post(
+                BIKE_API_URL,
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            print(self.service_name, "bike", data)
+            return data.get("data", data)
+        except Exception as e:
+            print(f"error from {self.service_name} bike api call: {e}")
+            return None
+
     def fetch_prices(self, source: tuple, destination: tuple) -> dict | None:
-        """Fetch prices from Ola."""
+        """Fetch prices from Ola, including bike prices."""
         params = {
             "pickupLat": source[0],
             "pickupLng": source[1],
@@ -47,4 +118,25 @@ class Ola(BaseRideService):
             "silent": "false",
             "suggestPickup": "true",
         }
-        return self._make_request("GET", params=params)
+        main_data = self._make_request("GET", params=params)
+
+        # Fetch bike price separately
+        bike_data = self._fetch_bike_price(source, destination)
+
+        # Merge bike data into main response structure
+        if main_data and bike_data:
+            bike_estimate = bike_data.get("rideEstimate", {})
+            if bike_estimate and bike_estimate.get("amount"):
+                # Ensure p2p.categories structure exists
+                if "p2p" not in main_data:
+                    main_data["p2p"] = {}
+                if "categories" not in main_data["p2p"]:
+                    main_data["p2p"]["categories"] = {}
+
+                # Add bike category to match expected structure
+                main_data["p2p"]["categories"]["bike"] = {
+                    "price": bike_estimate.get("amount", ""),
+                    "fareId": bike_estimate.get("fareId", "")
+                }
+
+        return main_data

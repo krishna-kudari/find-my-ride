@@ -6,6 +6,7 @@ import re
 # Category mapping: platform-specific names -> common category names
 CATEGORY_MAPPING = {
     "ola": {
+        "bike": "bike",
         "auto": "auto",
         "mini": "mini",
         "prime": "prime",
