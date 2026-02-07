@@ -24,10 +24,27 @@ CATEGORY_MAPPING = {
         "electric": "prime",  # Electric sedans similar to premier
     },
     "rapido": {
+        # Bike services
         "link": "bike",
-        "bike": "bike",
+        "scooty": "bike",
+        "c2c": "bike",
+        # Auto services
         "auto": "auto",
-        "car": "mini",
+        "auto priority": "auto",
+        "auto pet": "auto",
+        "auto c2c": "auto",
+        # Mini/Car services
+        "cabeconomy": "mini",
+        "cab economy": "mini",
+        "cab priority": "mini",
+        "cabac": "mini",
+        "cab ac": "mini",
+        # Prime services
+        "cabpremium": "prime",
+        "cab premium": "prime",
+        # SUV services
+        "cab suv": "suv",
+        "cabsuv": "suv",
     },
 }
 
@@ -149,27 +166,62 @@ def parse_rapido_fares(rapido_data):
 
     fares = {}
     try:
-        # Rapido structure: {"quotes": [{"serviceName": "Link", "amountBreakup": {"final": {"total": 63}}, ...}]}
-        quotes = rapido_data.get("quotes", [])
+        # Rapido structure: {"data": {"quotes": [...]}} or {"quotes": [...]}
+        # Handle both nested and direct structures
+        if "data" in rapido_data:
+            quotes = rapido_data.get("data", {}).get("quotes", [])
+        else:
+            quotes = rapido_data.get("quotes", [])
         
         for quote in quotes:
-            service_name = quote.get("serviceName") or quote.get("serviceDisplayName", "")
+            # Skip delivery services
+            order_type = quote.get("orderType", "")
+            if order_type == "delivery":
+                continue
+            
+            service_name = quote.get("serviceName") or quote.get("serviceDisplayName", "") or quote.get("name", "")
             normalized_name = _normalize_category_name(service_name)
             
-            # Find mapped category
+            # Find mapped category - check service name first
             mapped_category = None
-            for rapido_name, common_name in CATEGORY_MAPPING["rapido"].items():
-                if rapido_name in normalized_name:
-                    mapped_category = common_name
-                    break
             
-            # If no mapping found, try to infer from seating capacity
+            # Check for exact matches first
+            if normalized_name in CATEGORY_MAPPING["rapido"]:
+                mapped_category = CATEGORY_MAPPING["rapido"][normalized_name]
+            else:
+                # Check for partial matches
+                for rapido_name, common_name in CATEGORY_MAPPING["rapido"].items():
+                    if rapido_name in normalized_name:
+                        mapped_category = common_name
+                        break
+            
+            # If still no mapping, use orderType as fallback
+            if not mapped_category:
+                order_type_normalized = _normalize_category_name(order_type)
+                if "auto" in order_type_normalized:
+                    mapped_category = "auto"
+                elif "cab" in order_type_normalized:
+                    # Determine cab type based on orderType
+                    if "suv" in order_type_normalized:
+                        mapped_category = "suv"
+                    elif "premium" in order_type_normalized:
+                        mapped_category = "prime"
+                    else:
+                        mapped_category = "mini"
+                elif order_type_normalized in ["app", "scooty", "c2c"]:
+                    mapped_category = "bike"
+            
+            # Final fallback: infer from seating capacity
             if not mapped_category:
                 seating_capacity = quote.get("seatingCapacity", 0)
                 if seating_capacity == 1:
                     mapped_category = "bike"
-                elif seating_capacity >= 3:
+                elif seating_capacity == 3:
                     mapped_category = "auto"
+                elif seating_capacity == 4:
+                    mapped_category = "mini"
+                elif seating_capacity >= 6:
+                    mapped_category = "suv"
             
             if not mapped_category:
                 continue
