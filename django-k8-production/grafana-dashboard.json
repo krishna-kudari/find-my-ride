@@ -1,0 +1,131 @@
+# k8s/monitoring/grafana-dashboard.json
+# Grafana Dashboard for Django API
+
+{
+  "dashboard": {
+    "title": "Django API - Production",
+    "tags": ["django", "production", "api"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "Request Rate",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [{
+          "expr": "sum(rate(django_http_requests_total_by_method_total[5m])) by (method)"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "reqps" }]
+      },
+      {
+        "title": "Error Rate",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [{
+          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[5m])) / sum(rate(django_http_responses_total_by_status_total[5m]))"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "percentunit" }],
+        "alert": {
+          "conditions": [{
+            "evaluator": { "params": [0.05], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }],
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Error Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "title": "Response Time (P50, P95, P99)",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))",
+            "legendFormat": "P99"
+          }
+        ],
+        "type": "graph",
+        "yaxes": [{ "format": "s" }]
+      },
+      {
+        "title": "Pod CPU Usage",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "targets": [{
+          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"django-api-.*\"}[5m])) by (pod)"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "percentunit" }]
+      },
+      {
+        "title": "Pod Memory Usage",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "targets": [{
+          "expr": "sum(container_memory_working_set_bytes{pod=~\"django-api-.*\"}) by (pod)"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "bytes" }]
+      },
+      {
+        "title": "Database Connections",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+        "targets": [{
+          "expr": "django_db_connections_total"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "short" }]
+      },
+      {
+        "title": "Cache Hit Rate",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "targets": [{
+          "expr": "sum(rate(django_cache_hits_total[5m])) / sum(rate(django_cache_gets_total[5m]))"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "percentunit" }]
+      },
+      {
+        "title": "Top 10 Slowest Endpoints",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+        "targets": [{
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le, view)))"
+        }],
+        "type": "table"
+      },
+      {
+        "title": "Celery Task Rate",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+        "targets": [{
+          "expr": "sum(rate(celery_tasks_total[5m])) by (state)"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "ops" }]
+      },
+      {
+        "title": "Celery Queue Length",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+        "targets": [{
+          "expr": "celery_queue_length"
+        }],
+        "type": "graph",
+        "yaxes": [{ "format": "short" }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,157 @@
+# k8s/monitoring/servicemonitor.yaml
+# Prometheus ServiceMonitor for Django API metrics collection
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: django-api
+  namespace: production
+  labels:
+    app: django-api
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: django-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    scheme: http
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_pod_label_app]
+      targetLabel: app
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: django-api-alerts
+  namespace: production
+  labels:
+    app: django-api
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: django_api
+    interval: 30s
+    rules:
+    
+    # High error rate
+    - alert: HighErrorRate
+      expr: |
+        (
+          sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+          /
+          sum(rate(django_http_responses_total_by_status_total[5m]))
+        ) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+        team: backend
+      annotations:
+        summary: "High HTTP 5xx error rate"
+        description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+        runbook_url: "https://runbooks.yourdomain.com/django-api/high-error-rate"
+    
+    # High response time
+    - alert: HighResponseTime
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(django_http_requests_latency_seconds_bucket[5m]))
+          by (le, view)
+        ) > 1
+      for: 10m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: "High API response time"
+        description: "P95 latency is {{ $value }}s for {{ $labels.view }}"
+        runbook_url: "https://runbooks.yourdomain.com/django-api/high-latency"
+    
+    # Database connection pool exhaustion
+    - alert: DatabaseConnectionPoolExhausted
+      expr: |
+        django_db_connections_total >= django_db_connections_max * 0.9
+      for: 5m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: "Database connection pool nearly exhausted"
+        description: "{{ $value }} connections in use ({{ django_db_connections_max }} max)"
+    
+    # High memory usage
+    - alert: HighMemoryUsage
+      expr: |
+        (
+          container_memory_working_set_bytes{pod=~"django-api-.*"}
+          /
+          container_spec_memory_limit_bytes{pod=~"django-api-.*"}
+        ) > 0.85
+      for: 5m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is {{ $value | humanizePercentage }}"
+    
+    # Pod restart frequency
+    - alert: FrequentPodRestarts
+      expr: |
+        rate(kube_pod_container_status_restarts_total{pod=~"django-api-.*"}[15m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: "Frequent pod restarts detected"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+    
+    # Cache hit rate too low
+    - alert: LowCacheHitRate
+      expr: |
+        (
+          sum(rate(django_cache_hits_total[5m]))
+          /
+          sum(rate(django_cache_gets_total[5m]))
+        ) < 0.5
+      for: 10m
+      labels:
+        severity: info
+        team: backend
+      annotations:
+        summary: "Low cache hit rate"
+        description: "Cache hit rate is {{ $value | humanizePercentage }}"
+    
+    # Celery queue backed up
+    - alert: CeleryQueueBackedUp
+      expr: |
+        celery_queue_length > 1000
+      for: 10m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: "Celery queue backed up"
+        description: "Queue {{ $labels.queue }} has {{ $value }} tasks pending"
+    
+    # No healthy pods
+    - alert: NoHealthyPods
+      expr: |
+        sum(up{job="django-api"}) == 0
+      for: 1m
+      labels:
+        severity: critical
+        team: backend
+      annotations:
+        summary: "No healthy Django API pods"
+        description: "All Django API pods are down!"
+        runbook_url: "https://runbooks.yourdomain.com/django-api/no-healthy-pods"
