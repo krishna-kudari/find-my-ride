@@ -1,0 +1,27 @@
+# Cost-Optimized Configuration for Learning & Testing
+# Use this file to minimize costs while testing the setup
+# Usage: terraform apply -var-file=terraform.tfvars.learning
+
+aws_region = "us-east-1"
+environment = "dev"
+project_name = "django-api-learning"
+
+# VPC Configuration (same as default)
+vpc_cidr = "10.0.0.0/16"
+private_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+public_subnet_cidrs = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+database_subnet_cidrs = ["10.0.201.0/24", "10.0.202.0/24", "10.0.203.0/24"]
+
+# Minimal RDS Configuration
+rds_instance_class = "db.t3.micro"  # Smallest instance (Free Tier eligible)
+rds_allocated_storage = 10  # Minimum storage
+rds_max_allocated_storage = 20  # Reduced max storage
+db_name = "django_db"
+db_username = "django_user"
+
+# Minimal Redis Configuration
+redis_node_type = "cache.t3.micro"  # Smallest instance (Free Tier eligible)
+
+# Note: EKS node group configuration is in main.tf
+# You'll need to modify main.tf temporarily or create a separate module
+# to use smaller instances and fewer nodes for learning
