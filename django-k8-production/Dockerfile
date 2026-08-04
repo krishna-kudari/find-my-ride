@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Django Production
 # Stage 1: Builder - Install dependencies
-FROM python:3.11-slim as builder
+FROM python:3.12-slim as builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -22,7 +22,7 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.t
 
 
 # Stage 2: Runtime - Minimal production image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Create non-root user for security
 RUN groupadd -r django && useradd -r -g django django
